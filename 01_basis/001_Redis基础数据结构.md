@@ -196,3 +196,142 @@ OK
 (nil)
 ```
 
+<font color = "tomato">【慢操作】</font>
+
+​		lindex相当于Java链表的get(int index)方法，它需要对链表进行遍历，性能随着参数index增大而变差。
+
+​		ltrim的两个参数start_index和end_index定义了一个区间，在这个区间内的值，ltrim要保留，区间之外的则统统砍掉。我们可以通过ltrim来实现一个定长的链表。
+
+​		index可以为负数，index=-1表示倒数第一个元素，同理index=-2表示倒数第二个元素。
+
+```shell
+> rpush books python java golang
+(integer) 3
+> lindex books 1   # O(n)慎用
+"java"
+> lrange books 0 -1   # 获取所有元素,O(n)慎用
+1) "python"
+2) "java"
+3) "golang"
+> ltrim books 1 -1   # O(n)慎用
+OK
+> lrange books 0 -1
+1) "java"
+2) "golang"
+> ltrim books 1 0   # 这其实是清空了整个列表，因为区间范围长度为负
+OK
+> llen books
+(integer) 0
+```
+
+<font color = "tomato">【快速列表】</font>
+
+​		如果再深入一点，会发现Redis底层存储的不是一个简单的linkedlist，而是称之为”快速链表“（quicklist）的一个结构。
+
+​		首先在列表较少的情况下，会使用一块连续的内存存储，这个结构是ziplist，即压缩列表。它将所有的元素彼此紧挨着一起存储，分配的是一块连续的内存。当数据量比较多的时候才会改为quicklist。因为普通的链表需要的附加指针空间太大，会浪费空间，还会加重内存的碎片化，比如某普通链表里存的只是int类型的数据，结构上还需要两个额外的指针prev和next。所以Redis将链表和ziplist结合起来组成了quicklist，也就是将多个ziplist使用双向指针串起来使用。quicklist既满足了快速的插入删除性能，又不会出现太大的空间冗余。
+
+<img src="../image/image-20210416143215780.png" alt="image-20210416143215780" style="zoom: 50%;" />
+
+##### 2.3、hash（字典）
+
+​		Redis的字典相当于Java语言里面的HashMap，
+
+<img src="../image/image-20210416143507099.png" alt="image-20210416143507099" style="zoom: 50%;" />
+
+​		它是无序字典，内部存储了很多键值对。实现结构上与Java的hashMap也是一样的，都是”数组 + 链表“二维结构。第一维hash的数组位置碰撞时，就会将碰撞的元素使用链表串接起来。
+
+<img src="../image/image-20210416143539414.png" alt="image-20210416143539414" style="zoom:50%;" />
+
+​		不同的是，Redis的字典的值只能是字符串，另外他们rehash的方式不一样，因为Java的HashMap在字典很大时，rehash是个耗时的操作，需要一次性全部rehash。Redis为了追求高性能，不能堵塞服务，所以采用了渐进式rehash策略。
+
+​		渐进式rehash会在rehash的同事，保留新旧两个hash结构，查询时会同事查询两个hash结构，然后在后续的定时任务以及hash操作指令中，循序渐进地将旧hash的内容一点点地迁移到新的hash结构中。当搬迁完成了，就会使用新的hash结构取而代之。
+
+<img src="../image/image-20210416143835898.png" alt="image-20210416143835898" style="zoom:50%;" />
+
+​		当hash移除了最后一个元素之后，该数据结构被自动删除，内存被回收。
+
+​		hash结构也可以用来存储用户信息，与字符串需要一次性全部序列化整个对象不同，hash可以对用户结构中的每个字段单独存储。这样当我们需要获取用户信息时可以进行部分获取。而以整个字符串的形式去保存用户信息的话，就只能一次性全部读取，这样就会浪费网络流量。
+
+​		hash也有缺点，hash结构的存储消耗要高于单个字符串。到底该使用hash还是字符串，需要根据实际情况再三权衡。
+
+```shell
+> hset books java "think in java"   # 命令行的字符串如果包含空格，要用引号括起来
+(integer) 1
+> hset books golang "concurrency in go"
+(integer) 1
+> hset books python "python cookbook"
+(integer) 1
+> hgetall books  # entries(), key和value间隔出现
+1) "java"
+2) "think in java"
+3) "golang"
+4) "concurrency in go"
+5) "python"
+6) "python cookbook"
+> hlen books
+(integer) 3
+> hget books java
+"think in java"
+> hset books golang "learning go programming"   # 更新操作，所以返回0
+(integer) 0
+> hget books golang
+"learning go programming"
+> hmset books java "effective java" python "learning python" golang "modern golang programming"   # 批量set
+OK
+```
+
+​		同字符串一样，hash结构中单个子key也可以进行计数，它对应的指令是hincrby，和incr的使用方法基本一样。
+
+```shell
+> hset user-laoqian age 29
+(integer) 1
+> hincrby user-laoqian age 1
+(integer) 30
+```
+
+##### 2.4、set（集合）
+
+​		Redis的集合相当于Java语言里面的HashSet，它内部的键值对是无序的、唯一的。它的内部实现相当于一个特殊的字典，字典中所有的value都是一个值NULL。
+
+​		当集合中最后一个元素被移除后，数据结构被自动删除，内存被回收。
+
+```shell
+> sadd books python
+(integer) 1
+> sadd books python # 重复
+(integer) 0
+> sadd books java golang
+(integer) 2
+> smembers books   # 注意顺序，和插入的并不一致，因为set是无序的
+1) "golang"
+2) "python"
+3) "java"
+> sismember books java   # 查询某个value是否存在，相当于contains(o)
+(integer) 1
+> sismember books rust
+(integer) 0
+> scard books   # 获取长度相当于count()
+(integer) 3
+> spop books   # 弹出一个
+"golang"
+```
+
+##### 2.5、zset（有序列表）
+
+​		zset可能是Redis提供的最有特色的数据结构，它类似于Java的SortedSet和HashMap的结合体，一方面它是一个set，保证了内部value的唯一性，另一方面它可以给每个value赋予一个score，代表这个value的排序权重。它的内部实现是用了一种叫做”跳跃列表“的数据结构。
+
+​		zset中最后一个value被移除后，数据结构被自动删除，内存被回收。
+
+<img src="../image/image-20210416145925348.png" alt="image-20210416145925348" style="zoom:50%;" />
+
+<font color = "tomato">【跳跃列表】</font>
+
+​		zset内部的排序功能是通过”跳跃列表“数据结构来实现的。
+
+​		因为zset要支持随机的插入和删除，所以它不宜使用数据来表示。我们先来看一个普通的链表数据结构。如图
+
+<img src="../image/image-20210416150119845.png" alt="image-20210416150119845" style="zoom:50%;" />
+
+​		跳跃列表类似于层级制，最下面一层所有的元素都会串起来。然后每隔几个元素挑选出一个代表， 再将这几个代表使用另外一级指针串起来。然后在这些代表里再挑出二级代表，再串起来。最终形成金字塔结构。
+
+<img src="../image/image-20210416150147465.png" alt="image-20210416150147465" style="zoom:50%;" />
