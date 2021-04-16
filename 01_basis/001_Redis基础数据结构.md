@@ -61,7 +61,7 @@
 
 ​		Redis的字符串是动态字符串，是可以修改的字符串，内部结构的实现类似于Java的ArrayList，采用预分配冗余空间的方式来减少内存的频繁分配，如图所示，内部为当前字符串分配的实际空间capacity一般要高于实际字符串长度len。当字符串长度小于1MB时，扩容都是加倍现有的空间。如果字符串长度超过1MB，扩容时一次只会多扩1MB的空间。<font color= "blue">需要注意的是字符串最大长度为512MB。</font>
 
-<img src="/Users/maple/notes/git_learing/redis_learing/image/image-20210416104304599.png" alt="image-20210416104304599" style="zoom:67%;" />
+<img src="../image/image-20210416104304599.png" alt="image-20210416104304599" style="zoom:67%;" />
 
 <font color = "tomato">【键值对】</font>
 
@@ -156,7 +156,7 @@ OK
 
 ​		当列表弹出了最后一个元素之后，该数据结构被自动删除，内存被回收。
 
-<img src="/Users/maple/Library/Application Support/typora-user-images/image-20210416111219334.png" alt="image-20210416111219334" style="zoom:50%;" />
+<img src="../image/image-20210416111219334.png" alt="image-20210416111219334" style="zoom:50%;" />
 
 ​		Redis的列表结构常用来做异步队列使用。将需要延后处理的任务结构体序列化成字符串，塞进Redis的列表，另一个线程从这个列表中轮询数据进行处理。
 
