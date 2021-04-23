@@ -33,3 +33,5 @@ typedef struct zskiplist {
 
 <img src="../image/image-20210423110054509.png" alt="image-20210423110054509" style="zoom:50%;" />
 
+<img src="../image/image-20210423114905510.png" alt="image-20210423114905510" style="zoom:50%;" />
+
